@@ -1,0 +1,442 @@
+{
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/ZOUMKAI/MachineLearning/blob/main/0701\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "9Ahw4x5hMkN_",
+        "outputId": "59a7819b-a781-466f-84bd-87873fe97e5b",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        }
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "\u001b[?25l   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m0.0/819.5 kB\u001b[0m \u001b[31m?\u001b[0m eta \u001b[36m-:--:--\u001b[0m\r\u001b[2K   \u001b[91m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m\u001b[91m╸\u001b[0m\u001b[90m━━━\u001b[0m \u001b[32m757.8/819.5 kB\u001b[0m \u001b[31m23.6 MB/s\u001b[0m eta \u001b[36m0:00:01\u001b[0m\r\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m819.5/819.5 kB\u001b[0m \u001b[31m11.4 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[?25h\u001b[?25l   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m0.0/165.6 kB\u001b[0m \u001b[31m?\u001b[0m eta \u001b[36m-:--:--\u001b[0m\r\u001b[2K   \u001b[90m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\u001b[0m \u001b[32m165.6/165.6 kB\u001b[0m \u001b[31m7.4 MB/s\u001b[0m eta \u001b[36m0:00:00\u001b[0m\n",
+            "\u001b[?25h"
+          ]
+        }
+      ],
+      "source": [
+        "!pip install Flask pyngrok line-bot-sdk requests --quiet\n",
+        "!pip install google-genai --quiet"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "9ngnvFgWMlli"
+      },
+      "outputs": [],
+      "source": [
+        "from google.colab import userdata\n",
+        "\n",
+        "ngrok_authtoken = userdata.get('NGROK_AUTHTOKEN')\n",
+        "line_channel_access_token = userdata.get('LINE_CHANNEL_ACCESS_TOKEN')\n",
+        "line_channel_secret = userdata.get('LINE_CHANNEL_SECRET')\n",
+        "gemini_api_key = userdata.get('GEMINI_API_KEY')\n",
+        "port = 5051\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "yQSj-lVgNMm3"
+      },
+      "outputs": [],
+      "source": [
+        "import os\n",
+        "from pyngrok import ngrok"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "a3yngmFY5jos"
+      },
+      "outputs": [],
+      "source": [
+        "ngrok.kill()"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "bFF8Q-4QNP2m",
+        "outputId": "811b4695-ef25-4ce5-d15b-2b24a9be3404",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        }
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Ngrok URL: https://landing-skied-babbling.ngrok-free.dev\n",
+            "✅ LINE Webhook URL 已自動更新為：https://landing-skied-babbling.ngrok-free.dev\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "True"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 5
+        }
+      ],
+      "source": [
+        "import requests\n",
+        "\n",
+        "ngrok.set_auth_token(ngrok_authtoken)\n",
+        "tunnel = ngrok.connect(5051, name=\"linebot_tunnel\")\n",
+        "webhook_url = tunnel.public_url\n",
+        "\n",
+        "print(f\"Ngrok URL: {webhook_url}\")\n",
+        "\n",
+        "# 自動更新 LINE Webhook URL\n",
+        "def update_line_webhook(webhook_url):\n",
+        "    \"\"\"使用 LINE Messaging API 更新 Webhook URL\"\"\"\n",
+        "    url = \"https://api.line.me/v2/bot/channel/webhook/endpoint\"\n",
+        "    headers = {\n",
+        "        \"Authorization\": f\"Bearer {line_channel_access_token}\",\n",
+        "        \"Content-Type\": \"application/json\"\n",
+        "    }\n",
+        "    data = {\n",
+        "        \"endpoint\": webhook_url\n",
+        "    }\n",
+        "\n",
+        "    response = requests.put(url, headers=headers, json=data)\n",
+        "\n",
+        "    if response.status_code == 200:\n",
+        "        print(f\"✅ LINE Webhook URL 已自動更新為：{webhook_url}\")\n",
+        "        return True\n",
+        "    else:\n",
+        "        print(f\"❌ 更新失敗：{response.status_code} - {response.text}\")\n",
+        "        return False\n",
+        "\n",
+        "# 執行更新\n",
+        "update_line_webhook(webhook_url)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "collapsed": true,
+        "id": "-6TWyKMniuOo",
+        "outputId": "80d3cd39-7dcd-455c-fbe7-33075f4b3c18",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        }
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "AI AGENT（AI 代理）是一個比傳統AI模型（如單純的聊天機器人或圖像生成器）更具自主性、目標導向和行動能力的系統。你可以將它想像成一個**「具備思考能力，並且能主動採取行動來達成特定目標的數位工作者」**。\n",
+            "\n",
+            "它不再僅僅是接收指令然後給出回應，而是能夠**理解複雜的目標，自主規劃步驟，並利用各種工具來執行任務**。\n",
+            "\n",
+            "**核心構成要素與工作原理：**\n",
+            "\n",
+            "AI Agent 的工作流程通常包含以下幾個關鍵環節：\n",
+            "\n",
+            "1.  **感知 (Perception)：**\n",
+            "    *   能夠從環境中獲取資訊。這可以是文字輸入、圖像、資料庫內容、網頁資訊、API 回應等。\n",
+            "    *   **舉例：** 接收用戶「幫我規劃一次北海道的五天四夜自由行」的指令，並讀取當前日期和用戶偏好。\n",
+            "\n",
+            "2.  **思考/規劃 (Thought/Planning)：**\n",
+            "    *   這是 AI Agent 的「大腦」，通常由大型語言模型（LLM）或其他AI模型擔任。\n",
+            "    *   它會分析感知到的資訊，理解目標，並將其分解為更小的、可執行的子任務。\n",
+            "    *   它會根據自身記憶、學習到的知識和推理能力，制定出一步步的行動計劃。\n",
+            "    *   **舉例：**\n",
+            "        *   將「規劃北海道自由行」分解為：選擇交通工具、預訂機票酒店、安排每日行程、查詢當地景點美食、預算估計等。\n",
+            "        *   規劃執行順序：先查機票價格，再定酒店，然後排行程。\n",
+            "\n",
+            "3.  **行動 (Action)：**\n",
+            "    *   AI Agent 不僅會思考，還會「動手」。它會調用各種外部工具（Tools）來執行規劃好的任務。\n",
+            "    *   **工具可以是：**\n",
+            "        *   **網頁瀏覽器：** 搜尋資訊。\n",
+            "        *   **API 接口：** 預訂機票酒店、發送郵件、更新日曆、訪問資料庫。\n",
+            "        *   **程式碼解釋器：** 執行Python程式碼進行數據分析或處理。\n",
+            "        *   **文件操作：** 讀寫文件。\n",
+            "    *   **舉例：**\n",
+            "        *   使用航班查詢 API 查詢機票價格和班次。\n",
+            "        *   使用酒店預訂 API 查詢酒店空房和價格。\n",
+            "        *   使用地圖 API 查詢景點位置和交通路線。\n",
+            "        *   生成文字建議（如行程規劃、美食推薦）。\n",
+            "\n",
+            "4.  **記憶/學習 (Memory/Learning)：**\n",
+            "    *   AI Agent 能夠記住過去的對話、執行的任務、成功的策略和失敗的教訓。\n",
+            "    *   這使得它在執行長期或複雜任務時能夠保持上下文，並隨著時間推移而改進表現。\n",
+            "    *   **舉例：** 記住用戶對上次行程的不滿意之處，以便下次規劃時避免。\n",
+            "\n",
+            "5.  **反思/評估 (Reflection/Evaluation)：**\n",
+            "    *   Agent 會審視其行動的結果，判斷是否達成了目標。如果沒有，它會重新思考和調整計劃。\n",
+            "    *   這是一個自我修正的過程，使 Agent 更具彈性。\n",
+            "    *   **舉例：** 發現預訂的酒店位置不理想，會重新搜尋並修改計劃。\n",
+            "\n",
+            "**AI Agent 的關鍵特點：**\n",
+            "\n",
+            "*   **自主性 (Autonomy)：** 能夠在無需持續人工干預的情況下執行任務。\n",
+            "*   **目標導向 (Goal-Oriented)：** 所有行動都圍繞著一個或多個預設目標。\n",
+            "*   **環境感知 (Environmental Awareness)：** 能理解和解釋其操作環境中的資訊。\n",
+            "*   **工具使用 (Tool-Use)：** 能夠利用外部工具擴展其能力，突破LLM本身的限制。\n",
+            "*   **規劃與推理 (Planning & Reasoning)：** 能夠分解複雜任務，制定執行策略。\n",
+            "*   **記憶與適應 (Memory & Adaptation)：** 能夠從經驗中學習，並根據新的資訊調整行為。\n",
+            "\n",
+            "**為什麼 AI Agent 很重要？**\n",
+            "\n",
+            "它將AI的能力從單純的「生成」提升到「執行」，使得AI能夠真正成為協作者、自動化助手，甚至能夠獨立完成過去需要人類介入才能完成的複雜任務。\n",
+            "\n",
+            "**常見的應用場景：**\n",
+            "\n",
+            "*   **自動化個人助理：** 替你安排行程、回復郵件、預訂餐廳、進行資料搜索。\n",
+            "*   **軟體開發助理：** 根據需求生成程式碼、調試錯誤、編寫測試用例，甚至部署應用。\n",
+            "*   **數據分析師：** 自動獲取數據、進行分析、生成圖表和報告。\n",
+            "*   **商業流程自動化：** 管理專案、處理客戶服務請求、優化供應鏈。\n",
+            "*   **遊戲中的 NPC：** 表現出更智慧、更具適應性的行為。\n",
+            "\n",
+            "總而言之，AI Agent 代表了AI發展的一個重要方向，它讓AI從一個「被動的響應者」變成了「主動的問題解決者」，具有巨大的潛力和應用價值。\n"
+          ]
+        }
+      ],
+      "source": [
+        "from google import genai\n",
+        "\n",
+        "client = genai.Client(api_key=gemini_api_key)\n",
+        "\n",
+        "response = client.models.generate_content(\n",
+        "    model=\"gemini-2.5-flash\",\n",
+        "    contents=\"什麼是AI AGENT？\"\n",
+        ")\n",
+        "print(response.text)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "JBvycaVmiuOp"
+      },
+      "outputs": [],
+      "source": [
+        "def stateless_query(payload):\n",
+        "    response = client.models.generate_content(\n",
+        "        model=\"gemini-2.5-flash\",\n",
+        "        contents=payload\n",
+        "    )\n",
+        "    return response.text\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "f-oeubJyMjEW",
+        "collapsed": true,
+        "outputId": "136a6f2b-40af-4767-bbd8-95793e4cef0c",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        }
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "**明新科技大學 (Ming Hsin University of Science and Technology, 簡稱明新科大)** 是一所位於臺灣新竹縣湖口鄉的科技大學。\n",
+            "\n",
+            "**主要特色與簡介：**\n",
+            "\n",
+            "1.  **歷史悠久與發展：** 學校創立於1966年，前身為「明新工業專科學校」，經過多年耕耘與發展，於2002年正式改制為科技大學。其深厚的技職教育背景，使其在實務教學方面擁有豐富經驗。\n",
+            "\n",
+            "2.  **地理位置優勢：** 明新科大坐落於桃竹苗地區，毗鄰新竹科學園區，這使得學校在與高科技產業的鏈結上具有得天獨厚的優勢，方便進行產學合作，並為學生提供豐富的實習與就業機會。\n",
+            "\n",
+            "3.  **辦學宗旨與特色：**\n",
+            "    *   **務實致用：** 學校秉持「務實致用」的辦學理念，課程設計強調理論與實務並重，旨在培養學生具備解決實際問題的能力。\n",
+            "    *   **專業技能與人文素養：** 除了專業技能的培養，明新科大也重視學生的人文素養與品德教育，期望培育出品學兼優的現代人才。\n",
+            "    *   **產學合作：** 學校積極推動與企業界的產學合作計畫，提供多元的實習機會，並鼓勵學生考取專業證照，以提升畢業生的職場競爭力。\n",
+            "\n",
+            "4.  **學院與學術領域：** 明新科大目前設有工學院、管理學院、服務事業與資訊學院等，涵蓋工程、管理、設計、資訊、觀光餐旅等多個專業領域。\n",
+            "\n",
+            "5.  **就業導向：** 明新科大畢業生在企業界普遍受到歡迎，擁有良好的就業表現，尤其在桃竹苗地區的產業中，明新科大的畢業生扮演著重要的角色。\n",
+            "\n",
+            "總體而言，明新科技大學是一所深耕技職教育，與產業脈動緊密結合，致力於培養國家發展所需專業技術與管理人才的優質學府。\n"
+          ]
+        }
+      ],
+      "source": [
+        "result = stateless_query(\"簡介明新科技大學\")\n",
+        "print(result)"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "execution_count": null,
+      "metadata": {
+        "id": "jdG0_hVBMjEX",
+        "outputId": "a84e605a-6d7f-4ccf-bb9f-95e2ad43c996",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        }
+      },
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            " * Serving Flask app '__main__'\n",
+            " * Debug mode: off\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "INFO:werkzeug:\u001b[31m\u001b[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\u001b[0m\n",
+            " * Running on http://127.0.0.1:5051\n",
+            "INFO:werkzeug:\u001b[33mPress CTRL+C to quit\u001b[0m\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "BODY:  {\"destination\":\"Uca511fbc529970b435eac4d5c87f9471\",\"events\":[{\"type\":\"message\",\"message\":{\"type\":\"text\",\"id\":\"615029627358020136\",\"quoteToken\":\"M9xdl8-enxw0xK0JDzAWLlJ3DKRXtL-_NNjrr6fSZhHqxQ1TS6MZ4VuhbtKJXOq_D1JbqN7xJR2RTNFncnjtYL5Ypn3V5ObF_Y1-UiztqZGUmFKfKUoTnAugV1VykkfXhyhB0MRnXZIwGaj6sRHNXw\",\"markAsReadToken\":\"mw6bAcHZatJ9MhpY_5yfzBskiy4y0R_N2ElML-ZEMAqDfQBUy7hQuqDgVruj8T-ewCdZE8852w4Zwj3C6q7N4CpZFDq05Bz-T1kEeWb2DOT8wNz9U5zIG41qV3OKIojsdvpKwYLR_BOwJ2UAH8NvPwHFP8HkMbeMdmvzUK0PxGxp0hso3UBYBO26WS25ooqKGBk-iDxHR6ZlC5zyFc7Vgg\",\"text\":\"AI 簡介明新科技大學\"},\"webhookEventId\":\"01KS6RSEE13C69W0F12FVH160C\",\"deliveryContext\":{\"isRedelivery\":false},\"timestamp\":1779417528742,\"source\":{\"type\":\"user\",\"userId\":\"U4c28faa6b4288acea2070a1906546976\"},\"replyToken\":\"52e8f3346ba74e4e96d3d7993f0da960\",\"mode\":\"active\"}]}\n"
+          ]
+        },
+        {
+          "output_type": "stream",
+          "name": "stderr",
+          "text": [
+            "INFO:werkzeug:127.0.0.1 - - [22/May/2026 02:38:59] \"POST / HTTP/1.1\" 200 -\n",
+            "WARNING:pyngrok.process.ngrok:t=2026-05-22T02:40:21+0000 lvl=warn msg=\"Stopping forwarder\" name=linebot_tunnel acceptErr=\"failed to accept connection: Listener closed\"\n"
+          ]
+        }
+      ],
+      "source": [
+        "from flask import Flask, request, abort\n",
+        "\n",
+        "from linebot.v3 import (\n",
+        "    WebhookHandler\n",
+        ")\n",
+        "from linebot.v3.exceptions import (\n",
+        "    InvalidSignatureError\n",
+        ")\n",
+        "from linebot.v3.messaging import (\n",
+        "    Configuration,\n",
+        "    ApiClient,\n",
+        "    MessagingApi,\n",
+        "    ReplyMessageRequest,\n",
+        "    TextMessage,\n",
+        ")\n",
+        "from linebot.v3.webhooks import (\n",
+        "    MessageEvent,\n",
+        "    TextMessageContent,\n",
+        ")\n",
+        "\n",
+        "app = Flask(__name__)\n",
+        "\n",
+        "configuration = Configuration(access_token=line_channel_access_token)\n",
+        "handler = WebhookHandler(line_channel_secret)\n",
+        "\n",
+        "\n",
+        "@app.route(\"/\", methods=['POST'])\n",
+        "def callback():\n",
+        "    # get X-Line-Signature header value\n",
+        "    signature = request.headers['X-Line-Signature']\n",
+        "\n",
+        "    # get request body as text\n",
+        "    body = request.get_data(as_text=True)\n",
+        "    print(\"BODY: \", body)\n",
+        "    app.logger.info(\"Request body: \" + body)\n",
+        "\n",
+        "    # handle webhook body\n",
+        "    try:\n",
+        "        handler.handle(body, signature)\n",
+        "    except InvalidSignatureError:\n",
+        "        app.logger.info(\"Invalid signature. Please check your channel access token/channel secret.\")\n",
+        "        abort(400)\n",
+        "\n",
+        "    return 'OK'\n",
+        "\n",
+        "\n",
+        "@handler.add(MessageEvent, message=TextMessageContent)\n",
+        "def handle_message(event):\n",
+        "    text = event.message.text\n",
+        "    with ApiClient(configuration) as api_client:\n",
+        "        line_bot_api = MessagingApi(api_client)\n",
+        "        if text.startswith('AI '):#因為這裡有限定只能用A1 來做開頭\n",
+        "            prompt = text[3:]\n",
+        "            reply_text = stateless_query(prompt)\n",
+        "            line_bot_api.reply_message_with_http_info(\n",
+        "                ReplyMessageRequest(\n",
+        "                    reply_token=event.reply_token,\n",
+        "                    messages=[TextMessage(text=reply_text)]\n",
+        "                )\n",
+        "            )\n",
+        "\n",
+        "        else:\n",
+        "            line_bot_api.reply_message_with_http_info(\n",
+        "                ReplyMessageRequest(\n",
+        "                    reply_token=event.reply_token,\n",
+        "                    messages=[TextMessage(text=event.message.text),\n",
+        "                        TextMessage(text=event.message.text)]\n",
+        "                )\n",
+        "            )\n",
+        "\n",
+        "if __name__ == \"__main__\":\n",
+        "    app.run(port=port)"
+      ]
+    }
+  ],
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "display_name": "linebot",
+      "language": "python",
+      "name": "python3"
+    },
+    "language_info": {
+      "codemirror_mode": {
+        "name": "ipython",
+        "version": 3
+      },
+      "file_extension": ".py",
+      "mimetype": "text/x-python",
+      "name": "python",
+      "nbconvert_exporter": "python",
+      "pygments_lexer": "ipython3",
+      "version": "3.12.3"
+    }
+  },
+  "nbformat": 4,
+  "nbformat_minor": 0
+}
